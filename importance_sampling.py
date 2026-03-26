@@ -19,11 +19,13 @@ def grad_u(N, theta, X, r, T, sigma, K, S0):
 
 def theta_newton_algo(theta_0, N, X, r, T, sigma, K, S0, epsilon=1e-6, max_iter=1000):
     theta = theta_0
+    theta_list = [theta]
     i = 0
     while (i<max_iter and abs(grad_u(N, theta, X, r, T, sigma, K, S0)) > epsilon):
         theta = theta - u(N, theta, X, r, T, sigma, K, S0)/grad_u(N, theta, X, r, T, sigma, K, S0)
+        theta_list.append(theta)
         i += 1
-    return theta
+    return theta, theta_list
 
 def normal_Abramowitz_Stegun(x):
     # Abramowitz and Stegun approximation for the normal distribution function
@@ -33,6 +35,8 @@ def normal_Abramowitz_Stegun(x):
     else:
         return 1 - normal_Abramowitz_Stegun(-x)
 
+import numpy.random as npr
+
 def price_option_MC(S0, K, T, r, sigma, N):
     # S0: initial stock price
     # K: strike price
@@ -41,21 +45,50 @@ def price_option_MC(S0, K, T, r, sigma, N):
     # sigma: volatility of the stock
     # N: number of Monte Carlo simulations (sample size)
 
-    # model (always have such a section in your MC code)
-    X = npr.normal(0, 1, N)
+    # Box-Muller
+    U = npr.random(N/2) # careful: N must be pair 
+    V = npr.random(N/2)
+    X = np.sqrt(-2 * np.log(U)) * np.cos(2 * np.pi * V) 
+    Y = np.sqrt(-2 * np.log(U)) * np.sin(2 * np.pi * V) 
+    Z = np.concatenate((X,Y)) # combine the two arrays to get N standard normal random variables
     
-    payoff = np.exp(-r*T)*np.maximum(S-K, 0) # call function
-
+    payoff = np.array([g(x, r, T, sigma, K, S0) for x in Z])
     MC_price = np.mean(payoff)
-
+    
     # 95% confidence interval
-    std = np.std(payoff) # standard deviation estimator
+    std = np.std(payoff)
     error = 1.96*std/np.sqrt(N)
 
     CI_up = MC_price + error
     CI_down = MC_price - error
 
     # true price using the Black-Scholes formula
-    d1 = 1./(sigma*np.sqrt(T))*(np.log(S0/K) + (r + (sigma**2)/2)*T)
-    d2 = 1./(sigma*np.sqrt(T))*(np.log(S0/K) + (r - (sigma**2)/2)*T)
-    True_price = S0*norm.cdf(d1) - K*np.exp(-r*T)*norm.cdf(d2)
+    d1 = 1./(sigma*np.sqrt(T))*(np.log(K/S0) + (r + (sigma**2)/2)*T)
+    d2 = 1./(sigma*np.sqrt(T))*(np.log(K/S0) + (r - (sigma**2)/2)*T)
+    True_price = - K*np.exp(-r*T)*normal_Abramowitz_Stegun(d2) + S0*normal_Abramowitz_Stegun(d1)
+
+    return MC_price, True_price, CI_up, CI_down, error
+
+# our criteria for finding the optimal N is the difference between the MC price and the true price, which should be less than epsilon
+def find_optimal_N(S0, K, T, r, sigma, epsilon=1e-3):
+    N = 10e6
+    price = price_option_MC(S0, K, T, r, sigma, N)
+    while (abs(price[0] - price[1]) > epsilon):
+        N *= 10
+        price = price_option_MC(S0, K, T, r, sigma, N)
+    return N
+
+def plot_theta(theta_0, N, X, r, T, sigma, K, S0, epsilon=1e-6, max_iter=1000):
+    theta_list = theta_newton_algo(theta_0, N, X, r, T, sigma, K, S0, epsilon, max_iter)[1]
+    index = []
+    for i in range(len(theta_list)):
+        index.append(i)
+    
+    plt.plot(index, theta_list)
+    plt.xlabel('iteration')
+    plt.ylabel('theta')
+    plt.title('Convergence of theta in Newton\'s algorithm')
+    plt.show()
+
+
+      
