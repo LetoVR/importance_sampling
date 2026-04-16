@@ -144,3 +144,71 @@ for k in Ks:
     plt.grid(True)
 plt.legend()
 plt.show()
+
+
+def european_call_importance_sampling_MC(G, s0, K, r, sigma, T, N, mu):
+    MC_price_list = np.zeros(len(mu))
+    CI_lower_list = np.zeros(len(mu))
+    CI_upper_list = np.zeros(len(mu))
+
+    for (i,mu_values) in enumerate(mu):
+        ST_IS = s0*np.exp((r-sigma**2/2)*T+sigma*np.sqrt(T)*(G+mu_values))
+        payoff_IS = np.exp(-r*T)*np.maximum(ST_IS-K,0)*np.exp(-mu_values**2/2-mu_values*G)
+        MC_price_IS = np.mean(payoff_IS)
+
+        #confidence interval
+        std_IS = np.std(payoff_IS)
+        error_IS = 1.664*std_IS/np.sqrt(N)
+        CI_upper = MC_price_IS + error_IS
+        CI_lower = MC_price_IS - error_IS
+
+        MC_price_list[i] = MC_price_IS
+        CI_lower_list[i] = CI_lower
+        CI_upper_list[i] = CI_upper
+
+    d1 = 1.0 / (sigma * np.sqrt(T)) * (np.log(S0 / K) + (r + (sigma**2) / 2) * T)
+    d2 = 1.0 / (sigma * np.sqrt(T)) * (np.log(S0 / K) + (r - (sigma**2) / 2) * T)
+    True_price = S0 * normal_Abramowitz_Stegun(d1) - K * np.exp(-r * T) * normal_Abramowitz_Stegun(d2)
+
+    return MC_price_list, CI_lower_list, CI_upper_list, True_price
+
+# Pour K = 2.5, tracer sur le mˆeme graphique P pour θ = 0 identique-
+# ment (Monte Carlo standard) puis pour θ = ˆθN∗ (echantillonnage pr ́ef ́erenciel)
+# en fonction de N. Tracer sur le mˆeme graphe les intervalles de confiance `a 90%
+# de P pour chacun des estimateurs. Ajouter la valeur th ́eorique.
+
+K = 2.5
+
+N_values = [100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000]
+MC_price_theta0 = []
+MC_price_theta_N = []
+CI_lower_list_theta0 = []
+CI_upper_list_theta0 = []
+CI_lower_list_theta_N = []
+CI_upper_list_theta_N = []
+
+for N in N_values:
+    theta_N = theta_newton_algo(0, N, Z, r, T, sigma, K, S0)[0]
+    theta_list = [0, theta_N]
+    MC_price_list, CI_lower_list, CI_upper_list, True_price = european_call_importance_sampling_MC(Z, S0, K, r, sigma, T, N, theta_list)
+    
+    MC_price_theta0.append(MC_price_list[0])
+    MC_price_theta_N.append(MC_price_list[1])
+    CI_lower_list_theta0.append(CI_lower_list[0])
+    CI_upper_list_theta0.append(CI_upper_list[0])
+    CI_lower_list_theta_N.append(CI_lower_list[1])
+    CI_upper_list_theta_N.append(CI_upper_list[1])
+
+plt.plot(N_values, MC_price_theta0, label='MC price with theta=0')
+plt.plot(N_values, MC_price_theta_N, label='MC price with theta=theta_N')
+plt.fill_between(N_values, CI_lower_list_theta0, CI_upper_list_theta0, color='blue', alpha=0.2, label='CI 90% (theta=0)')
+plt.fill_between(N_values, CI_lower_list_theta_N, CI_upper_list_theta_N, color='orange', alpha=0.2, label='CI 90% (theta=theta_N)')
+plt.axhline(y=True_price, color='red', linestyle='--', label='True price')
+plt.xscale('log')
+plt.xlabel('N (log scale)')
+plt.ylabel('Option Price')
+plt.title('Option Price vs N for K=2.5')
+plt.legend()
+plt.grid(True)
+plt.show()
+
