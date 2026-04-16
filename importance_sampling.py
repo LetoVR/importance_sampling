@@ -125,14 +125,22 @@ for k in Ks:
     print(f"Error: {error:.4f}")
     
     theta_list = plot_theta(Z, 0, N_opt, r, T, sigma, k, S0)
-    v_list = []
-    for theta in theta_list:
+plt.legend()
+plt.show()
+
+for k in Ks:
+    theta_list = theta_newton_algo(0, N_opt, Z, r, T, sigma, k, S0)[1]
+    v_list = np.zeros(len(theta_list))
+    for i, theta in enumerate(theta_list):
         f_theta = f(theta, Z, r, T, sigma, k, S0)
         variance = (N_opt)/(N_opt-1) * (np.mean(f_theta**2) - (np.mean(f_theta))**2)
         v = np.sqrt(variance / N_opt)
-        v_list.append(v)
+        v_list[i] = v
     
-    plt.plot(range(len(v_list)), v, label='Variance of f(theta, Z) for K={}'.format(k))
-
+    plt.plot(range(len(v_list)), v_list, label='Variance of f(theta, Z) for K={}'.format(k))
+    plt.xlabel('iteration')
+    plt.ylabel('Variance')
+    plt.title("Variance of f(theta, Z) during Newton's Algorithm")
+    plt.grid(True)
 plt.legend()
 plt.show()
