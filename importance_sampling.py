@@ -172,14 +172,8 @@ def european_call_importance_sampling_MC(G, s0, K, r, sigma, T, N, mu):
 
     return MC_price_list, CI_lower_list, CI_upper_list, True_price
 
-# Pour K = 2.5, tracer sur le mˆeme graphique P pour θ = 0 identique-
-# ment (Monte Carlo standard) puis pour θ = ˆθN∗ (echantillonnage pr ́ef ́erenciel)
-# en fonction de N. Tracer sur le mˆeme graphe les intervalles de confiance `a 90%
-# de P pour chacun des estimateurs. Ajouter la valeur th ́eorique.
-
 K = 2.5
-
-N_values = [100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000]
+N_values = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
 MC_price_theta0 = []
 MC_price_theta_N = []
 CI_lower_list_theta0 = []
@@ -187,10 +181,12 @@ CI_upper_list_theta0 = []
 CI_lower_list_theta_N = []
 CI_upper_list_theta_N = []
 
+npr.seed(95566)  # for reproducibility
 for N in N_values:
-    theta_N = theta_newton_algo(0, N, Z, r, T, sigma, K, S0)[0]
+    G = npr.normal(0, 1, N)
+    theta_N = theta_newton_algo(0, N, G, r, T, sigma, K, S0)[0]
     theta_list = [0, theta_N]
-    MC_price_list, CI_lower_list, CI_upper_list, True_price = european_call_importance_sampling_MC(Z, S0, K, r, sigma, T, N, theta_list)
+    MC_price_list, CI_lower_list, CI_upper_list, True_price = european_call_importance_sampling_MC(G, S0, K, r, sigma, T, N, theta_list)
     
     MC_price_theta0.append(MC_price_list[0])
     MC_price_theta_N.append(MC_price_list[1])
