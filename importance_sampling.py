@@ -250,8 +250,8 @@ def importance_sampling_basket_MC(X, K, lamb, r, T, N, theta, S0, sigma):
     CI_upper_list = np.zeros(len(theta))
 
     for (i,theta_value) in enumerate(theta):
-        ST_IS = [S0[i]*]
-        payoff_IS = g_basket(X + theta_value, lamb, K, r, T) * np.exp(- theta_value**2/2 - theta_value*X)
+        ST_IS = np.array([S0[i]*np.exp((r-sigma[i]**2/2)*T+sigma[i]*np.sqrt(T)*X[i]) for i in range(3)])
+        payoff_IS = g_basket(ST_IS + theta_value, lamb, K, r, T) * np.exp(- theta_value**2/2 - theta_value*X)
         MC_price_IS = np.mean(payoff_IS)
 
         # confidence interval
@@ -266,9 +266,9 @@ def importance_sampling_basket_MC(X, K, lamb, r, T, N, theta, S0, sigma):
 
     return MC_price_list, CI_lower_list, CI_upper_list
 
-gamma = np.array([1, 0.5, 0.5],
+gamma = np.array([[1, 0.5, 0.5],
                  [0.5, 1, 0.5],
-                 [0.5, 0.5, 1])
+                 [0.5, 0.5, 1]])
 
 L = np.linalg.cholesky(gamma)
 
@@ -277,6 +277,7 @@ r = 0.01
 T = 1
 lamb = [1/3, 1/3, 1/3]
 S0 = [1, 1, 1]
+sigma = [0.25,0.28,0.3]
 
 N_values = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
 MC_price_theta0 = []
@@ -293,7 +294,7 @@ for N in N_values:
     X = np.sqrt(T) * L@G
     theta_N = theta_newton_algo_basket(0, N, X, lamb, K, r, T)[0]
     theta_list = [0, theta_N]
-    MC_price_list, CI_lower_list, CI_upper_list = importance_sampling_basket_MC(X, K, lamb, r, T, N, theta_list)
+    MC_price_list, CI_lower_list, CI_upper_list = importance_sampling_basket_MC(X, K, lamb, r, T, N, theta_list,S0,sigma)
     
     MC_price_theta0.append(MC_price_list[0])
     MC_price_theta_N.append(MC_price_list[1])
