@@ -213,25 +213,28 @@ plt.show()
 def h(X, lamb, K):
     return np.maximum(0, lamb[0]*X[0] + lamb[1]*X[1] + lamb[2]*X[2] - K)
 
-def u_h(theta, X, lamb, K):
-    return np.mean((theta - X) * h(X, lamb, K)**2 * np.exp(-theta*X + 0.5*theta**2))
+def g_basket(X, lamb, K, r, T):
+    return np.exp(-r*T)*h(X, lamb, K)
 
-def grad_u_h(theta, X, lamb, K):
-    return np.mean((1 + (theta - X)**2) * h(X, lamb, K)**2 * np.exp(-theta*X + 0.5*theta**2))
+def u_basket(theta, X, lamb, K, r, T):
+    return np.mean((theta - X) * g_basket(X, lamb, K, r, T)**2 * np.exp(-theta*X + 0.5*theta**2))
+
+def grad_u_basket(theta, X, lamb, K, r, T):
+    return np.mean((1 + (theta - X)**2) * g_basket(X, lamb, K, r, T)**2 * np.exp(-theta*X + 0.5*theta**2))
 
 def theta_newton_algo_basket(theta_0, N, X, lamb, K, epsilon=1e-6, max_iter=1000):
     theta = theta_0
     theta_list = [theta]
     i = 0
-    while (i < max_iter and abs(u_h(theta, X, lamb, K)) > epsilon):
-        theta = theta - u_h(theta, X, lamb, K) / grad_u_h(theta, X, lamb, K)
+    while (i < max_iter and abs(u_basket(theta, X, lamb, K, r, T)) > epsilon):
+        theta = theta - u_basket(theta, X, lamb, K, r, T) / grad_u_basket(theta, X, lamb, K, r, T)
         theta_list.append(theta)
         i += 1
     return theta, theta_list
 
-def price_option_basket_MC(X, K, lamb, N):
+def price_option_basket_MC(X, K, lamb, r, T, N):
     
-    payoff = h(X, lamb, K)
+    payoff = g_basket(X, lamb, K, r, T)
     MC_price = np.mean(payoff)
     
     std = np.std(payoff)
@@ -241,13 +244,13 @@ def price_option_basket_MC(X, K, lamb, N):
 
     return MC_price, CI_up, CI_down, error
 
-def importance_sampling_basket_MC(X, K, lamb, N, theta):
+def importance_sampling_basket_MC(X, K, lamb, r, T, N, theta):
     MC_price_list = np.zeros(len(theta))
     CI_lower_list = np.zeros(len(theta))
     CI_upper_list = np.zeros(len(theta))
 
     for (i,theta_value) in enumerate(theta):
-        payoff_IS = h(X + theta_value, lamb, K) * np.exp(- theta_value**2/2 - theta_value*X)
+        payoff_IS = g_basket(X + theta_value, lamb, K, r, T) * np.exp(- theta_value**2/2 - theta_value*X)
         MC_price_IS = np.mean(payoff_IS)
 
         # confidence interval
@@ -263,8 +266,8 @@ def importance_sampling_basket_MC(X, K, lamb, N, theta):
     return MC_price_list, CI_lower_list, CI_upper_list
 
 K = 1.25
+r = 0.01
 T = 1
-sigma = [0.25, 0.28, 0.3]
 lamb = [1/3, 1/3, 1/3]
 
 N_values = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
@@ -279,9 +282,9 @@ npr.seed(95566)  # for reproducibility
 
 for N in N_values:
     X = npr.normal(0, 1, (3, N))
-    theta_N = theta_newton_algo_basket(0, N, X, lamb, K)[0]
+    theta_N = theta_newton_algo_basket(0, N, X, lamb, K, r, T)[0]
     theta_list = [0, theta_N]
-    MC_price_list, CI_lower_list, CI_upper_list = importance_sampling_basket_MC(X, K, lamb, N, theta_list)
+    MC_price_list, CI_lower_list, CI_upper_list = importance_sampling_basket_MC(X, K, lamb, r, T, N, theta_list)
     
     MC_price_theta0.append(MC_price_list[0])
     MC_price_theta_N.append(MC_price_list[1])
