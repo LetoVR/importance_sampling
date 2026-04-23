@@ -137,7 +137,7 @@ for k in Ks:
         v = np.sqrt(variance / N_opt)
         v_list[i] = v
     
-    plt.plot(range(len(v_list)), v_list, label='Variance of f(theta, Z) for K={}'.format(k))
+    plt.plot(range(len(v_list)), v_list, label='K={}'.format(k))
     plt.xlabel('iteration')
     plt.ylabel('Variance')
     plt.title("Variance of f(theta, Z) during Newton's Algorithm")
@@ -204,6 +204,87 @@ plt.xscale('log')
 plt.xlabel('N (log scale)')
 plt.ylabel('Option Price')
 plt.title('Option Price vs N for K=2.5')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+#####
+
+def h(X, lamb, K):
+    return np.maximum(0, lamb[0]*X[0] + lamb[1]*X[1] + lamb[2]*X[2] - K)
+
+def price_option_basket_MC(X, K, lamb, N):
+    
+    payoff = h(X, lamb, K)
+    MC_price = np.mean(payoff)
+    
+    std = np.std(payoff)
+    error = 1.96 * std / np.sqrt(N)
+    CI_up = MC_price + error
+    CI_down = MC_price - error
+
+    return MC_price, CI_up, CI_down, error
+
+def importance_sampling_basket_MC(X, K, lamb, N, theta):
+    MC_price_list = np.zeros(len(theta))
+    CI_lower_list = np.zeros(len(theta))
+    CI_upper_list = np.zeros(len(theta))
+
+    for (i,theta_value) in enumerate(theta):
+        payoff_IS = h(X + theta_value, lamb, K) * np.exp(- theta_value**2/2 - theta_value*X)
+        MC_price_IS = np.mean(payoff_IS)
+
+        # confidence interval
+        std_IS = np.std(payoff_IS)
+        error_IS = 1.664*std_IS/np.sqrt(N)
+        CI_upper = MC_price_IS + error_IS
+        CI_lower = MC_price_IS - error_IS
+
+        MC_price_list[i] = MC_price_IS
+        CI_lower_list[i] = CI_lower
+        CI_upper_list[i] = CI_upper
+
+    return MC_price_list, CI_lower_list, CI_upper_list
+
+# tracer sur le même graphique le prix de cette option pour θ = 0 identiquement (Monte Carlo standard) 
+# puis pour θ = ˆθN* (echantillonnage prééerentiel) en fonction de N
+
+K = 1.25
+T = 1
+sigma = [0.25, 0.28, 0.3]
+lamb = [1/3, 1/3, 1/3]
+
+N_values = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
+MC_price_theta0 = []
+MC_price_theta_N = []
+CI_lower_list_theta0 = []
+CI_upper_list_theta0 = []
+CI_lower_list_theta_N = []
+CI_upper_list_theta_N = []
+
+npr.seed(95566)  # for reproducibility
+
+for N in N_values:
+    X = npr.normal(0, 1, (3, N))
+    theta_N = theta_newton_algo(0, N, X, r, T, sigma[0], K, S0)[0]
+    theta_list = [0, theta_N]
+    MC_price_list, CI_lower_list, CI_upper_list = importance_sampling_basket_MC(X, K, lamb, N, theta_list)
+    
+    MC_price_theta0.append(MC_price_list[0])
+    MC_price_theta_N.append(MC_price_list[1])
+    CI_lower_list_theta0.append(CI_lower_list[0])
+    CI_upper_list_theta0.append(CI_upper_list[0])
+    CI_lower_list_theta_N.append(CI_lower_list[1])
+    CI_upper_list_theta_N.append(CI_upper_list[1])
+
+plt.plot(N_values, MC_price_theta0, label='MC price with theta=0')
+plt.plot(N_values, MC_price_theta_N, label='MC price with theta=theta_N')
+plt.fill_between(N_values, CI_lower_list_theta0, CI_upper_list_theta0, color='blue', alpha=0.2, label='CI 90% (theta=0)')
+plt.fill_between(N_values, CI_lower_list_theta_N, CI_upper_list_theta_N, color='orange', alpha=0.2, label='CI 90% (theta=theta_N)')
+plt.xscale('log')
+plt.xlabel('N (log scale)')
+plt.ylabel('Option Price')
+plt.title('Option Price vs N for K=1.25')
 plt.legend()
 plt.grid(True)
 plt.show()
