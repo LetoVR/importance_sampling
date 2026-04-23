@@ -208,55 +208,58 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
+
 #####
 
-def h(X, lamb, K):
-    return np.maximum(0, lamb[0]*X[0] + lamb[1]*X[1] + lamb[2]*X[2] - K)
 
-def g_basket(X, lamb, K, r, T):
-    return np.exp(-r*T)*h(X, lamb, K)
+def g_basket(Z, lamb, K, r, T, S0, sigma, L):
+    W = np.sqrt(T) * np.dot(L, Z)
+    
+    S0_col = np.array(S0).reshape(3, 1)
+    sigma_col = np.array(sigma).reshape(3, 1)
+    lamb_col = np.array(lamb).reshape(3, 1)
 
-def u_basket(theta, X, lamb, K, r, T):
-    return np.mean((theta - X) * g_basket(X, lamb, K, r, T)**2 * np.exp(-theta*X + 0.5*theta**2))
+    ST = S0_col * np.exp((r - 0.5 * sigma_col**2) * T + sigma_col * W)
+    
+    payoff = np.maximum(0, np.sum(lamb_col * ST, axis=0) - K)
+    return np.exp(-r*T) * payoff
 
-def grad_u_basket(theta, X, lamb, K, r, T):
-    return np.mean((1 + (theta - X)**2) * g_basket(X, lamb, K, r, T)**2 * np.exp(-theta*X + 0.5*theta**2))
+def u_basket(Z, theta, lamb, K, r, T, S0, sigma, L):
+    return np.mean((theta - Z) * g_basket(Z, lamb, K, r, T, S0, sigma, L)**2 * np.exp(- (theta.T @ Z) + 0.5 * np.sum(theta**2)), axis=1, keepdims=True)
 
-def theta_newton_algo_basket(theta_0, N, X, lamb, K, epsilon=1e-6, max_iter=1000):
-    theta = theta_0
-    theta_list = [theta]
+def J_basket(Z, theta, lamb, K, r, T, S0, sigma, L):
+    g_val = g_basket(Z, lamb, K, r, T, S0, sigma, L)
+    exp_term = np.exp(- (theta.T @ Z) + 0.5 * np.sum(theta**2))
+    
+    weight = g_val**2 * exp_term
+    diff = theta - Z
+    N = Z.shape[1]
+    
+    J = np.eye(3) * np.mean(weight) + (diff * weight) @ diff.T / N
+    return J
+
+def theta_newton_algo_basket(Z, lamb, K, r, T, S0, sigma, L, epsilon=1e-6, max_iter=100):
+    theta = np.zeros((3, 1))
     i = 0
-    while (i < max_iter and abs(u_basket(theta, X, lamb, K, r, T)) > epsilon):
-        theta = theta - u_basket(theta, X, lamb, K, r, T) / grad_u_basket(theta, X, lamb, K, r, T)
-        theta_list.append(theta)
+    while (i < max_iter and np.linalg.norm(u_basket(Z, theta, lamb, K, r, T, S0, sigma, L)) > epsilon):
+        step = np.linalg.solve(J_basket(Z, theta, lamb, K, r, T, S0, sigma, L), -u_basket(Z, theta, lamb, K, r, T, S0, sigma, L))
+        theta = theta + step
         i += 1
-    return theta, theta_list
+    return theta
 
-def price_option_basket_MC(X, K, lamb, r, T, N):
-    
-    payoff = g_basket(X, lamb, K, r, T)
-    MC_price = np.mean(payoff)
-    
-    std = np.std(payoff)
-    error = 1.96 * std / np.sqrt(N)
-    CI_up = MC_price + error
-    CI_down = MC_price - error
-
-    return MC_price, CI_up, CI_down, error
-
-def importance_sampling_basket_MC(X, K, lamb, r, T, N, theta, S0, sigma):
+def importance_sampling_basket_MC(Z, K, lamb, r, T, N, theta, S0, sigma, L):
     MC_price_list = np.zeros(len(theta))
     CI_lower_list = np.zeros(len(theta))
     CI_upper_list = np.zeros(len(theta))
 
-    for (i,theta_value) in enumerate(theta):
-        ST_IS = np.array([S0[i]*np.exp((r-sigma[i]**2/2)*T+sigma[i]*np.sqrt(T)*X[i]) for i in range(3)])
-        payoff_IS = g_basket(ST_IS + theta_value, lamb, K, r, T) * np.exp(- theta_value**2/2 - theta_value*X)
+    for (i, theta_value) in enumerate(theta):
+        th = np.zeros((3,1)) if np.isscalar(theta_value) else theta_value.reshape(3,1)
+        
+        payoff_IS = g_basket(Z + th, lamb, K, r, T, S0, sigma, L) * np.exp(- (th.T @ Z) - 0.5 * np.sum(th**2))
         MC_price_IS = np.mean(payoff_IS)
 
-        # confidence interval
         std_IS = np.std(payoff_IS)
-        error_IS = 1.664*std_IS/np.sqrt(N)
+        error_IS = 1.645 * std_IS / np.sqrt(N)
         CI_upper = MC_price_IS + error_IS
         CI_lower = MC_price_IS - error_IS
 
@@ -267,17 +270,17 @@ def importance_sampling_basket_MC(X, K, lamb, r, T, N, theta, S0, sigma):
     return MC_price_list, CI_lower_list, CI_upper_list
 
 gamma = np.array([[1, 0.5, 0.5],
-                 [0.5, 1, 0.5],
-                 [0.5, 0.5, 1]])
+                  [0.5, 1, 0.5],
+                  [0.5, 0.5, 1]])
 
 L = np.linalg.cholesky(gamma)
 
 K = 1.25
 r = 0.01
 T = 1
-lamb = [1/3, 1/3, 1/3]
-S0 = [1, 1, 1]
-sigma = [0.25,0.28,0.3]
+lamb = np.array([1/3, 1/3, 1/3])
+S0 = np.array([1, 1, 1])
+sigma = np.array([0.25, 0.28, 0.3])
 
 N_values = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
 MC_price_theta0 = []
@@ -287,14 +290,15 @@ CI_upper_list_theta0 = []
 CI_lower_list_theta_N = []
 CI_upper_list_theta_N = []
 
-npr.seed(95566)  # for reproducibility
+npr.seed(95566) 
 
 for N in N_values:
     G = npr.normal(0, 1, (3, N))
-    X = np.sqrt(T) * L@G
-    theta_N = theta_newton_algo_basket(0, N, X, lamb, K, r, T)[0]
+    
+    theta_N = theta_newton_algo_basket(G, lamb, K, r, T, S0, sigma, L)
     theta_list = [0, theta_N]
-    MC_price_list, CI_lower_list, CI_upper_list = importance_sampling_basket_MC(X, K, lamb, r, T, N, theta_list,S0,sigma)
+    
+    MC_price_list, CI_lower_list, CI_upper_list = importance_sampling_basket_MC(G, K, lamb, r, T, N, theta_list, S0, sigma, L)
     
     MC_price_theta0.append(MC_price_list[0])
     MC_price_theta_N.append(MC_price_list[1])
@@ -316,3 +320,223 @@ plt.grid(True)
 plt.show()
 
 
+#####
+
+
+def h_symphonie(ST, K):
+    diff = ST - K
+
+    max_val = np.max(diff, axis=0)
+    min_val = np.min(diff, axis=0)
+    sum_val = np.sum(diff, axis=0)
+    median_val = sum_val - min_val - max_val
+    payoff = 0.5 * max_val + 0.5 * min_val - median_val
+    
+    return np.maximum(0, payoff)
+
+def g_symphonie(Z, K, r, T, S0, sigma, L):
+    W = np.sqrt(T) * np.dot(L, Z)
+    
+    S0_col = np.array(S0).reshape(3, 1)
+    sigma_col = np.array(sigma).reshape(3, 1)
+
+    ST = S0_col * np.exp((r - 0.5 * sigma_col**2) * T + sigma_col * W)
+    
+    payoff = h_symphonie(ST, K)
+    return np.exp(-r*T) * payoff
+
+import numpy as np
+import matplotlib.pyplot as plt
+import numpy.random as npr
+
+def h_symphonie(ST, K):
+    diff = ST - K
+    max_val = np.max(diff, axis=0)
+    min_val = np.min(diff, axis=0)
+    sum_val = np.sum(diff, axis=0)
+    median_val = sum_val - min_val - max_val
+    payoff_brut = 0.5 * max_val + 0.5 * min_val - median_val
+    return np.maximum(0, payoff_brut)
+
+def g_symphonie(Z, K, r, T, S0, sigma, L):
+    W = np.sqrt(T) * np.dot(L, Z)
+    
+    S0_col = np.array(S0).reshape(3, 1)
+    sigma_col = np.array(sigma).reshape(3, 1)
+
+    ST = S0_col * np.exp((r - 0.5 * sigma_col**2) * T + sigma_col * W)
+    
+    payoff = h_symphonie(ST, K)
+    return np.exp(-r*T) * payoff
+
+def u_symphonie(Z, theta, K, r, T, S0, sigma, L):
+    return np.mean((theta - Z) * g_symphonie(Z, K, r, T, S0, sigma, L)**2 * np.exp(- (theta.T @ Z) + 0.5 * np.sum(theta**2)), axis=1, keepdims=True)
+
+def J_symphonie(Z, theta, K, r, T, S0, sigma, L):
+    g_val = g_symphonie(Z, K, r, T, S0, sigma, L)
+    exp_term = np.exp(- (theta.T @ Z) + 0.5 * np.sum(theta**2))
+    
+    weight = g_val**2 * exp_term
+    diff = theta - Z
+    N = Z.shape[1]
+    
+    J = np.eye(3) * np.mean(weight) + (diff * weight) @ diff.T / N
+    return J
+
+def theta_newton_algo_symphonie(Z, K, r, T, S0, sigma, L, epsilon=1e-6, max_iter=100):
+    theta = np.zeros((3, 1))
+    i = 0
+    while (i < max_iter and np.linalg.norm(u_symphonie(Z, theta, K, r, T, S0, sigma, L)) > epsilon):
+        step = np.linalg.solve(J_symphonie(Z, theta, K, r, T, S0, sigma, L), -u_symphonie(Z, theta, K, r, T, S0, sigma, L))
+        theta = theta + step
+        i += 1
+    return theta
+
+def importance_sampling_symphonie_MC(Z, K, r, T, N, theta, S0, sigma, L):
+    MC_price_list = np.zeros(len(theta))
+    CI_lower_list = np.zeros(len(theta))
+    CI_upper_list = np.zeros(len(theta))
+
+    for (i, theta_value) in enumerate(theta):
+        th = np.zeros((3,1)) if np.isscalar(theta_value) else theta_value.reshape(3,1)
+        
+        payoff_IS = g_symphonie(Z + th, K, r, T, S0, sigma, L) * np.exp(- (th.T @ Z) - 0.5 * np.sum(th**2))
+        MC_price_IS = np.mean(payoff_IS)
+
+        std_IS = np.std(payoff_IS)
+        error_IS = 1.645 * std_IS / np.sqrt(N)
+        CI_upper = MC_price_IS + error_IS
+        CI_lower = MC_price_IS - error_IS
+
+        MC_price_list[i] = MC_price_IS
+        CI_lower_list[i] = CI_lower
+        CI_upper_list[i] = CI_upper
+
+    return MC_price_list, CI_lower_list, CI_upper_list
+
+gamma = np.array([[1, 0.5, 0.5],
+                  [0.5, 1, 0.5],
+                  [0.5, 0.5, 1]])
+
+L = np.linalg.cholesky(gamma)
+
+K = 1.25
+r = 0.01
+T = 1
+S0 = np.array([1, 1, 1])
+sigma = np.array([0.25, 0.28, 0.3])
+
+N_values = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
+MC_price_theta0 = []
+MC_price_theta_N = []
+CI_lower_list_theta0 = []
+CI_upper_list_theta0 = []
+CI_lower_list_theta_N = []
+CI_upper_list_theta_N = []
+
+npr.seed(9556) 
+
+for N in N_values:
+    G = npr.normal(0, 1, (3, N))
+    
+    theta_N = theta_newton_algo_symphonie(G, K, r, T, S0, sigma, L)
+    theta_list = [0, theta_N]
+    
+    MC_price_list, CI_lower_list, CI_upper_list = importance_sampling_symphonie_MC(G, K, r, T, N, theta_list, S0, sigma, L)
+    
+    MC_price_theta0.append(MC_price_list[0])
+    MC_price_theta_N.append(MC_price_list[1])
+    CI_lower_list_theta0.append(CI_lower_list[0])
+    CI_upper_list_theta0.append(CI_upper_list[0])
+    CI_lower_list_theta_N.append(CI_lower_list[1])
+    CI_upper_list_theta_N.append(CI_upper_list[1])
+
+plt.plot(N_values, MC_price_theta0, label='MC price with theta=0')
+plt.plot(N_values, MC_price_theta_N, label='MC price with theta=theta_N')
+plt.fill_between(N_values, CI_lower_list_theta0, CI_upper_list_theta0, color='blue', alpha=0.2, label='CI 90% (theta=0)')
+plt.fill_between(N_values, CI_lower_list_theta_N, CI_upper_list_theta_N, color='orange', alpha=0.2, label='CI 90% (theta=theta_N)')
+plt.xscale('log')
+plt.xlabel('N (log scale)')
+plt.ylabel('Option Price')
+plt.title('Symphonie Option Price vs N for K=1.25')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+#####
+
+
+gamma = np.array([[1, 0.5, 0.5],
+                  [0.5, 1, 0.5],
+                  [0.5, 0.5, 1]])
+
+L = np.linalg.cholesky(gamma)
+
+K = 1.25
+r = 0.01
+T = 1
+lamb = np.array([1/3, 1/3, 1/3])
+S0 = np.array([1, 1, 1])
+sigma = np.array([0.25, 0.28, 0.3])
+
+N_values = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
+
+MC_price = []
+MC_price_CV = []
+CI_lower = []
+CI_upper = []
+CI_lower_CV = []
+CI_upper_CV = []
+
+npr.seed(95566)
+
+EZ = np.sum(lamb * S0)
+
+for N in N_values:
+    G = npr.normal(0, 1, (3, N))
+    W = np.sqrt(T) * (L @ G)
+    
+    S0_col = np.array(S0).reshape(3, 1)
+    sigma_col = np.array(sigma).reshape(3, 1)
+    lamb_col = np.array(lamb).reshape(3, 1)
+
+    ST = S0_col * np.exp((r - 0.5 * sigma_col**2) * T + sigma_col * W)
+    
+    X = np.sum(lamb_col * ST, axis=0)
+    
+    Y = np.exp(-r*T) * np.maximum(0, X - K)
+    Z = np.exp(-r*T) * X
+    
+    cov = np.cov(Y, Z)[0, 1]
+    var_Z = np.var(Z)
+    c_star = cov / var_Z
+    
+    Y_CV = Y - c_star * (Z - EZ)
+    
+    price = np.mean(Y)
+    price_CV = np.mean(Y_CV)
+    
+    error = 1.645 * np.std(Y) / np.sqrt(N)
+    error_CV = 1.645 * np.std(Y_CV) / np.sqrt(N)
+    
+    MC_price.append(price)
+    MC_price_CV.append(price_CV)
+    
+    CI_lower.append(price - error)
+    CI_upper.append(price + error)
+    
+    CI_lower_CV.append(price_CV - error_CV)
+    CI_upper_CV.append(price_CV + error_CV)
+
+plt.plot(N_values, MC_price, label='Standard MC')
+plt.plot(N_values, MC_price_CV, label='MC with Control Variate')
+plt.fill_between(N_values, CI_lower, CI_upper, color='blue', alpha=0.2, label='CI 90% (Standard)')
+plt.fill_between(N_values, CI_lower_CV, CI_upper_CV, color='green', alpha=0.4, label='CI 90% (CV)')
+plt.xscale('log')
+plt.xlabel('N (log scale)')
+plt.ylabel('Option Price')
+plt.title('Variance Reduction by Control Variates (Basket Call)')
+plt.legend()
+plt.grid(True)
+plt.show()
