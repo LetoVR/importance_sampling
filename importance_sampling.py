@@ -213,6 +213,22 @@ plt.show()
 def h(X, lamb, K):
     return np.maximum(0, lamb[0]*X[0] + lamb[1]*X[1] + lamb[2]*X[2] - K)
 
+def u_h(theta, X, lamb, K):
+    return np.mean((theta - X) * h(X, lamb, K)**2 * np.exp(-theta*X + 0.5*theta**2))
+
+def grad_u_h(theta, X, lamb, K):
+    return np.mean((1 + (theta - X)**2) * h(X, lamb, K)**2 * np.exp(-theta*X + 0.5*theta**2))
+
+def theta_newton_algo_basket(theta_0, N, X, lamb, K, epsilon=1e-6, max_iter=1000):
+    theta = theta_0
+    theta_list = [theta]
+    i = 0
+    while (i < max_iter and abs(u_h(theta, X, lamb, K)) > epsilon):
+        theta = theta - u_h(theta, X, lamb, K) / grad_u_h(theta, X, lamb, K)
+        theta_list.append(theta)
+        i += 1
+    return theta, theta_list
+
 def price_option_basket_MC(X, K, lamb, N):
     
     payoff = h(X, lamb, K)
@@ -246,9 +262,6 @@ def importance_sampling_basket_MC(X, K, lamb, N, theta):
 
     return MC_price_list, CI_lower_list, CI_upper_list
 
-# tracer sur le même graphique le prix de cette option pour θ = 0 identiquement (Monte Carlo standard) 
-# puis pour θ = ˆθN* (echantillonnage prééerentiel) en fonction de N
-
 K = 1.25
 T = 1
 sigma = [0.25, 0.28, 0.3]
@@ -266,7 +279,7 @@ npr.seed(95566)  # for reproducibility
 
 for N in N_values:
     X = npr.normal(0, 1, (3, N))
-    theta_N = theta_newton_algo(0, N, X, r, T, sigma[0], K, S0)[0]
+    theta_N = theta_newton_algo_basket(0, N, X, lamb, K)[0]
     theta_list = [0, theta_N]
     MC_price_list, CI_lower_list, CI_upper_list = importance_sampling_basket_MC(X, K, lamb, N, theta_list)
     
@@ -288,4 +301,5 @@ plt.title('Option Price vs N for K=1.25')
 plt.legend()
 plt.grid(True)
 plt.show()
+
 
