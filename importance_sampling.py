@@ -11,41 +11,33 @@ def u(N, theta, X, r, T, sigma, K, S0):
 def grad_u(N, theta, X, r, T, sigma, K, S0):
     return np.mean((1 + (theta - X)**2) * g(X, r, T, sigma, K, S0)**2 * np.exp(-theta*X + 0.5*theta**2))
 
+# def theta_newton_algo(theta_0, N, X, r, T, sigma, K, S0, epsilon=1e-6, max_iter=1000):
+#     theta = theta_0
+#     theta_list = [theta]
+#     i = 0
+#     while (i < max_iter and abs(u(N, theta, X, r, T, sigma, K, S0)) > epsilon):
+#         theta = theta - u(N, theta, X, r, T, sigma, K, S0) / grad_u(N, theta, X, r, T, sigma, K, S0)
+#         theta_list.append(theta)
+#         i += 1
+#     return theta, theta_list
+
 def theta_newton_algo(theta_0, N, X, r, T, sigma, K, S0, epsilon=1e-6, max_iter=1000):
     theta = theta_0
     theta_list = [theta]
     i = 0
     while (i < max_iter and abs(u(N, theta, X, r, T, sigma, K, S0)) > epsilon):
-        theta = theta - u(N, theta, X, r, T, sigma, K, S0) / grad_u(N, theta, X, r, T, sigma, K, S0)
+        val_u = u(N, theta, X, r, T, sigma, K, S0)
+        grad = grad_u(N, theta, X, r, T, sigma, K, S0)
+        step = - val_u / grad
+        
+        alpha = 1.0
+        while abs(u(N, theta + alpha * step, X, r, T, sigma, K, S0)) >= abs(val_u) and alpha > 1e-4:
+            alpha /= 2.0
+            
+        theta = theta + alpha * step
         theta_list.append(theta)
         i += 1
     return theta, theta_list
-
-# def theta_newton_algo(theta_0, N, X, r, T, sigma, K, S0, epsilon=1e-6, max_iter=1000):
-#     theta = theta_0
-#     theta_list = [theta]
-#     i = 0
-    
-#     while i < max_iter:
-#         val_u = u(N, theta, X, r, T, sigma, K, S0)
-        
-#         # Condition d'arrêt
-#         if abs(val_u) <= epsilon:
-#             break
-            
-#         # Direction de Newton classique
-#         step = - val_u / grad_u(N, theta, X, r, T, sigma, K, S0)
-        
-#         # Algorithme à pas décroissant (Damped Newton)
-#         alpha = 1.0
-#         while abs(u(N, theta + alpha * step, X, r, T, sigma, K, S0)) >= abs(val_u) and alpha > 1e-4:
-#             alpha /= 2.0
-            
-#         theta = theta + alpha * step
-#         theta_list.append(theta)
-#         i += 1
-        
-#     return theta, theta_list
 
 def normal_Abramowitz_Stegun(x):
     if x >= 0:
@@ -53,8 +45,6 @@ def normal_Abramowitz_Stegun(x):
         return 1.0 - (1.0 / np.sqrt(2 * np.pi)) * np.exp(-x**2 / 2) * (0.319381530 * k - 0.356563782 * k**2 + 1.781477937 * k**3 - 1.821255978 * k**4 + 1.330274429 * k**5)
     else:
         return 1.0 - normal_Abramowitz_Stegun(-x)
-
-import numpy.random as npr
 
 def price_option_MC(Z, S0, K, T, r, sigma, N):
     
@@ -158,7 +148,7 @@ def european_call_importance_sampling_MC(G, s0, K, r, sigma, T, N, mu):
 
         #confidence interval
         std_IS = np.std(payoff_IS)
-        error_IS = 1.664*std_IS/np.sqrt(N)
+        error_IS = 1.645*std_IS/np.sqrt(N)
         CI_upper = MC_price_IS + error_IS
         CI_lower = MC_price_IS - error_IS
 
@@ -166,9 +156,9 @@ def european_call_importance_sampling_MC(G, s0, K, r, sigma, T, N, mu):
         CI_lower_list[i] = CI_lower
         CI_upper_list[i] = CI_upper
 
-    d1 = 1.0 / (sigma * np.sqrt(T)) * (np.log(S0 / K) + (r + (sigma**2) / 2) * T)
-    d2 = 1.0 / (sigma * np.sqrt(T)) * (np.log(S0 / K) + (r - (sigma**2) / 2) * T)
-    True_price = S0 * normal_Abramowitz_Stegun(d1) - K * np.exp(-r * T) * normal_Abramowitz_Stegun(d2)
+    d1 = 1.0 / (sigma * np.sqrt(T)) * (np.log(s0 / K) + (r + (sigma**2) / 2) * T)
+    d2 = 1.0 / (sigma * np.sqrt(T)) * (np.log(s0 / K) + (r - (sigma**2) / 2) * T)
+    True_price = s0 * normal_Abramowitz_Stegun(d1) - K * np.exp(-r * T) * normal_Abramowitz_Stegun(d2)
 
     return MC_price_list, CI_lower_list, CI_upper_list, True_price
 
@@ -238,12 +228,28 @@ def J_basket(Z, theta, lamb, K, r, T, S0, sigma, L):
     J = np.eye(3) * np.mean(weight) + (diff * weight) @ diff.T / N
     return J
 
+# def theta_newton_algo_basket(Z, lamb, K, r, T, S0, sigma, L, epsilon=1e-6, max_iter=100):
+#     theta = np.zeros((3, 1))
+#     i = 0
+#     while (i < max_iter and np.linalg.norm(u_basket(Z, theta, lamb, K, r, T, S0, sigma, L)) > epsilon):
+#         step = np.linalg.solve(J_basket(Z, theta, lamb, K, r, T, S0, sigma, L), -u_basket(Z, theta, lamb, K, r, T, S0, sigma, L))
+#         theta = theta + step
+#         i += 1
+#     return theta
+
 def theta_newton_algo_basket(Z, lamb, K, r, T, S0, sigma, L, epsilon=1e-6, max_iter=100):
     theta = np.zeros((3, 1))
     i = 0
     while (i < max_iter and np.linalg.norm(u_basket(Z, theta, lamb, K, r, T, S0, sigma, L)) > epsilon):
-        step = np.linalg.solve(J_basket(Z, theta, lamb, K, r, T, S0, sigma, L), -u_basket(Z, theta, lamb, K, r, T, S0, sigma, L))
-        theta = theta + step
+        val_u = u_basket(Z, theta, lamb, K, r, T, S0, sigma, L)
+        J = J_basket(Z, theta, lamb, K, r, T, S0, sigma, L)
+        step = np.linalg.solve(J, -val_u)
+        
+        alpha = 1.0
+        while np.linalg.norm(u_basket(Z, theta + alpha * step, lamb, K, r, T, S0, sigma, L)) >= np.linalg.norm(val_u) and alpha > 1e-4:
+            alpha /= 2.0
+            
+        theta = theta + alpha * step
         i += 1
     return theta
 
@@ -322,33 +328,6 @@ plt.show()
 
 #####
 
-
-def h_symphonie(ST, K):
-    diff = ST - K
-
-    max_val = np.max(diff, axis=0)
-    min_val = np.min(diff, axis=0)
-    sum_val = np.sum(diff, axis=0)
-    median_val = sum_val - min_val - max_val
-    payoff = 0.5 * max_val + 0.5 * min_val - median_val
-    
-    return np.maximum(0, payoff)
-
-def g_symphonie(Z, K, r, T, S0, sigma, L):
-    W = np.sqrt(T) * np.dot(L, Z)
-    
-    S0_col = np.array(S0).reshape(3, 1)
-    sigma_col = np.array(sigma).reshape(3, 1)
-
-    ST = S0_col * np.exp((r - 0.5 * sigma_col**2) * T + sigma_col * W)
-    
-    payoff = h_symphonie(ST, K)
-    return np.exp(-r*T) * payoff
-
-import numpy as np
-import matplotlib.pyplot as plt
-import numpy.random as npr
-
 def h_symphonie(ST, K):
     diff = ST - K
     max_val = np.max(diff, axis=0)
@@ -383,12 +362,28 @@ def J_symphonie(Z, theta, K, r, T, S0, sigma, L):
     J = np.eye(3) * np.mean(weight) + (diff * weight) @ diff.T / N
     return J
 
+# def theta_newton_algo_symphonie(Z, K, r, T, S0, sigma, L, epsilon=1e-6, max_iter=100):
+#     theta = np.zeros((3, 1))
+#     i = 0
+#     while (i < max_iter and np.linalg.norm(u_symphonie(Z, theta, K, r, T, S0, sigma, L)) > epsilon):
+#         step = np.linalg.solve(J_symphonie(Z, theta, K, r, T, S0, sigma, L), -u_symphonie(Z, theta, K, r, T, S0, sigma, L))
+#         theta = theta + step
+#         i += 1
+#     return theta
+
 def theta_newton_algo_symphonie(Z, K, r, T, S0, sigma, L, epsilon=1e-6, max_iter=100):
     theta = np.zeros((3, 1))
     i = 0
     while (i < max_iter and np.linalg.norm(u_symphonie(Z, theta, K, r, T, S0, sigma, L)) > epsilon):
-        step = np.linalg.solve(J_symphonie(Z, theta, K, r, T, S0, sigma, L), -u_symphonie(Z, theta, K, r, T, S0, sigma, L))
-        theta = theta + step
+        val_u = u_symphonie(Z, theta, K, r, T, S0, sigma, L)
+        J = J_symphonie(Z, theta, K, r, T, S0, sigma, L)
+        step = np.linalg.solve(J, -val_u)
+        
+        alpha = 1.0
+        while np.linalg.norm(u_symphonie(Z, theta + alpha * step, K, r, T, S0, sigma, L)) >= np.linalg.norm(val_u) and alpha > 1e-4:
+            alpha /= 2.0
+            
+        theta = theta + alpha * step
         i += 1
     return theta
 
