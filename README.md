@@ -1,93 +1,88 @@
-# ImportanceSampling-MC-Pricer-Cpp
+# Importance Sampling for Option Pricing
 
+Monte Carlo variance reduction via Importance Sampling, applied to vanilla and exotic options under Black-Scholes. Academic project in Quantitative Finance — ENSTA Paris / IP Paris (2026).
 
+**Authors:** Nathanaël Seropian · Leto Van Ruymbeke · Ramzi Jebali
 
-## Getting started
+---
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Overview
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Standard Monte Carlo struggles with out-of-the-money options: most paths yield zero payoff, making the estimator noisy and slow to converge. This project implements **Importance Sampling (IS)** — a change of measure that concentrates simulations in the "useful" region of the probability space — combined with a likelihood ratio correction to maintain unbiasedness.
 
-## Add your files
+The optimal shift parameter θ* is found by minimizing the estimator variance via a **damped Newton algorithm**.
 
-* [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+---
 
+## Methods
+
+### 1. Theoretical Framework
+- Change of measure for Gaussian distributions: `E[g(X)] = E[g(X+θ) · exp(−θX − ½‖θ‖²)]`
+- Gradient of the variance with respect to θ (Leibniz rule under expectation)
+- Damped Newton algorithm with backtracking line search for robust convergence
+
+### 2. Vanilla European Call (dimension 1)
+- Box-Muller sampling, adaptive N targeting ε = 10⁻³ at 95% confidence
+- Newton convergence tracked for strikes K ∈ {0.35, 0.54, 0.7, 1.24, 1.6, 2.5}
+- IS vs standard MC comparison on deep OTM case (K = 2.5)
+
+### 3. Exotic Options in Dimension 3
+- **Basket Call** — linear combination of 3 correlated underlyings (Cholesky decomposition of correlation matrix)
+- **Symphonie Option** — payoff based on max/min/median of the 3 underlyings; analytical study reveals K cancels out, making IS ineffective (the event is not rare)
+- Vectorized Newton with 3×3 Jacobian matrix
+
+### 4. Control Variates
+- Control variable: discounted basket value Z = e^{−rT} X(T), with known expectation Σλᵢ Sᵢ,₀
+- Optimal coefficient c* = Cov(Y, Z) / Var(Z)
+- Comparison with IS on Basket Call (K = 1.25): Control Variates outperform IS near-the-money at lower computational cost
+
+---
+
+## Key Results
+
+| Method | Strike | Variance reduction |
+|---|---|---|
+| Standard MC | K = 2.5 | baseline (unusable) |
+| Importance Sampling | K = 2.5 | dramatic — CI collapses immediately |
+| Importance Sampling | K = 1.25 (Basket) | moderate |
+| Control Variates | K = 1.25 (Basket) | superior to IS, near-zero cost |
+| IS on Symphonie | K = 1.25 | none — equivalent to standard MC |
+
+**Main takeaway:** IS is the weapon of choice for rare-event pricing (deep OTM). For near-the-money options, Control Variates often dominate in the simplicity/performance tradeoff.
+
+---
+
+## Repository Structure
+├── importance_sampling.py   # Full implementation (Newton, MC, IS, basket, Symphonie, CV)
+└── report/
+└── 4PRB9_report.pdf     # Full mathematical derivations and figures
+
+---
+
+## Dependencies
+
+```bash
+pip install numpy matplotlib
 ```
-cd existing_repo
-git remote add origin https://gitlab.ensta.fr/jebali/importancesampling-mc-pricer-cpp.git
-git branch -M main
-git push -uf origin main
+
+---
+
+## Parameters (default)
+
+```python
+S0 = 1        # Initial asset price
+sigma = 0.3   # Volatility
+r = 0.01      # Risk-free rate
+K = 1         # Strike
+T = 2         # Maturity
 ```
 
-## Integrate with your tools
+For the basket option: 3 correlated underlyings with ρᵢⱼ = 0.5, σ = [0.25, 0.28, 0.30], equal weights λ = 1/3.
 
-* [Set up project integrations](https://gitlab.ensta.fr/jebali/importancesampling-mc-pricer-cpp/-/settings/integrations)
+---
 
-## Collaborate with your team
+## Academic Context
 
-* [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Course: *PRB222 — Financial Engineering* (APM_4PRB9)  
+Program: Master's in Applied Mathematics — ENSTA Paris / Institut Polytechnique de Paris  
+Year: 2025–2026
