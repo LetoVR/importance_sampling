@@ -55,7 +55,7 @@ The optimal shift parameter θ* is found by minimizing the estimator variance vi
 ## Repository Structure
 ├── importance_sampling.py   # Full implementation (Newton, MC, IS, basket, Symphonie, CV)
 └── report/
-└── 4PRB9_report.pdf     # Full mathematical derivations and figures
+└── report.pdf     # Full mathematical derivations and figures
 
 ---
 
